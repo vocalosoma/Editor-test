@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>USTX ピッチ追従動画メーカー</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+<style>
+:root{color-scheme:dark}
+body{margin:0;padding:14px;background:#17181b;color:#c8cacd;font:14px/1.5 system-ui,'Hiragino Sans','Yu Gothic',sans-serif}
+h1{font-size:16px;margin:0 0 10px;font-weight:600}
+.row{display:flex;flex-wrap:wrap;gap:10px 16px;align-items:center;margin:8px 0}
+label{display:flex;gap:6px;align-items:center}
+input[type=range]{width:120px}
+input[type=color]{width:36px;height:28px;padding:0;border:1px solid #3d4046;border-radius:6px;background:none}
+#seek{flex:1;min-width:200px;width:auto}
+button,select{background:#2a2c31;color:#dcdee1;border:1px solid #3d4046;border-radius:6px;padding:6px 12px;font:inherit}
+button:hover:not(:disabled){background:#34373d}button:disabled{opacity:.5}
+canvas{width:100%;max-width:960px;display:block;background:#0a0b0d;border-radius:6px}
+canvas.clear{background:conic-gradient(#2a2a2a 25%,#3a3a3a 0 50%,#2a2a2a 0 75%,#3a3a3a 0) 0 0/24px 24px}
+small{color:#8a8d92}
+</style></head><body>
+<h1>USTX ピッチ追従動画メーカー</h1>
+<div class="row">
+ <input type="file" id="file" accept=".ustx,.yaml,.yml">
+ <label>パート <select id="part"><option value="all">すべて</option></select></label>
+</div>
+<canvas id="cv" width="1280" height="720"></canvas>
+<div class="row">
+ <button id="pb">再生</button>
+ <input type="range" id="seek" min="0" max="1" step="0.01" value="0">
+ <span id="tl">0.00 / 0.00</span>
+</div>
+<div class="row">
+ <label>横 <input type="range" id="hz" min="2" max="10" step="0.5" value="5"></label>
+ <label>縦 <input type="range" id="vz" min="8" max="40" step="1" value="22"></label>
+ <label>画質 <select id="res"><option value="1">1280×720</option><option value="1.5">1920×1080</option></select></label>
+ <label>fps <select id="fps"><option>30</option><option>60</option></select></label>
+</div>
+<div class="row">
+ <label>ピッチ線 <input type="color" id="pcol" value="#ff2a3d">
+  <select id="ppre"><option value="">プリセット</option>
+   <option value="#ff2a3d">ネオンレッド</option><option value="#ff2bd6">ネオンピンク</option><option value="#00f0ff">ネオンシアン</option><option value="#39ff14">ネオングリーン</option><option value="#f6ff00">ネオンイエロー</option><option value="#ff8a00">ネオンオレンジ</option><option value="#b44bff">ネオンパープル</option><option value="#ffffff">ホワイト</option></select></label>
+ <label>ノート <input type="color" id="ncol" value="#00f0ff">
+  <select id="npre"><option value="">プリセット</option>
+   <option value="#00f0ff">ネオンシアン</option><option value="#ff2bd6">ネオンピンク</option><option value="#39ff14">ネオングリーン</option><option value="#f6ff00">ネオンイエロー</option><option value="#ff8a00">ネオンオレンジ</option><option value="#b44bff">ネオンパープル</option><option value="#ff2a3d">ネオンレッド</option><option value="#b8b8b8">グレー</option></select></label>
+ <label><input type="checkbox" id="glow" checked> グロー</label>
+ <label><input type="checkbox" id="sub" checked> 字幕</label>
+ <label>背景 <select id="bg"><option value="dark">黒</option><option value="clear">透過</option></select></label>
+ <button id="rb">動画を書き出し(WebM)</button>
+</div>
+<small>書き出しは等倍の実時間で録画します。完了までこのタブを前面に出したままにしてください。音声は含みません。<br>背景「透過」で書き出すとアルファ付きWebMになります(Chrome/Edge推奨。Firefox・Safariでは透過されない場合があります)。編集ソフト側もWebMのアルファ対応が必要です。</small>
+
+<script>
+const $=id=>document.getElementById(id);
+const cv=$('cv'),ctx=cv.getContext('2d',{alpha:true});
+const W=1280,H=720,RATE=100,LEAD=1.5,TAIL=1;
+const FONT="'ほのか新アンティーク角','Hiragino Sans','Yu Gothic',sans-serif";
+let doc=null,parts=[],notes=[],phrases=[],curve=new Float32Array(0),total=0,t=-LEAD,playing=false,last=0,rec=null,tempos=[],res=480;
+
+const rgba=(h,a)=>{const n=parseInt(h.slice(1),16);return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`};
+
+// ---- かな → ローマ字
+const K='あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをんがぎぐげござじずぜぞだぢづでどばびぶべぼぱぴぷぺぽゔぁぃぅぇぉゃゅょ';
+const R='a i u e o ka ki ku ke ko sa shi su se so ta chi tsu te to na ni nu ne no ha hi fu he ho ma mi mu me mo ya yu yo ra ri ru re ro wa o n ga gi gu ge go za ji zu ze zo da ji zu de do ba bi bu be bo pa pi pu pe po vu a i u e o ya yu yo'.split(' ');
+function rom(l){
+ l=[...l].map(c=>{const k=c.charCodeAt(0);return k>=0x30A1&&k<=0x30F6?String.fromCharCode(k-0x60):c}).join('');
+ let o='';
+ for(let i=0;i<l.length;i++){
+  const c=l[i],j=K.indexOf(c);
+  if(j<0){o+=(c==='っ'||c==='ー'||c==='+'||c==='~')?'':c;continue}
+  let b=R[j];const n=l[i+1],y='ゃゅょ'.indexOf(n);
+  if(n&&y>=0&&b.length>1&&b.endsWith('i')){const v='auo'[y];b=['shi','chi','ji'].includes(b)?b.slice(0,-1)+v:b.slice(0,-1)+'y'+v;i++}
+  o+=b;
+ }
+ return o;
+}
+
+// ---- テンポ
+function t2s(tick){
+ let k=tempos[0];for(const x of tempos){if(x.p<=tick)k=x;else break}
+ return k.s+(tick-k.p)/res*60/k.b;
+}
+
+// ---- 読み込み
+function load(text){
+ doc=jsyaml.load(text)||{};
+ res=doc.resolution||480;
+ tempos=(doc.tempos&&doc.tempos.length?doc.tempos:[{position:0,bpm:doc.bpm||120}]).map(x=>({p:x.position||0,b:x.bpm||120})).sort((a,b)=>a.p-b.p);
+ tempos.forEach((x,i)=>{x.s=i?tempos[i-1].s+(x.p-tempos[i-1].p)/res*60/tempos[i-1].b:0});
+ parts=(doc.voice_parts||[]).filter(p=>p.notes&&p.notes.length);
+ const sel=$('part');sel.innerHTML='<option value="all">すべて</option>';
+ parts.forEach((p,i)=>sel.insertAdjacentHTML('beforeend',`<option value="${i}">${i+1}: ${(p.name||'part').replace(/</g,'&lt;')} (${p.notes.length})</option>`));
+ setup();
+}
+function setup(){
+ const v=$('part').value,use=v==='all'?parts:[parts[+v]];
+ notes=[];const pd=[];
+ for(const p of use){
+  const P=p.position||0;
+  for(const n of p.notes){
+   const l=String(n.lyric??'');
+   notes.push({s:t2s(P+n.position),e:t2s(P+n.position+n.duration),tone:n.tone,
+    disp:(l==='+'||l==='+~')?'ー':l,rom:rom(l),pit:((n.pitch&&n.pitch.data)||[]).slice().sort((a,b)=>a.x-b.x),vib:n.vibrato||null});
+  }
+  for(const c of (p.curves||[])) if(c.abbr==='pitd'&&c.xs)c.xs.forEach((x,i)=>pd.push({s:t2s(P+x),y:c.ys[i]||0}));
+ }
+ notes.sort((a,b)=>a.s-b.s);pd.sort((a,b)=>a.s-b.s);
+ total=notes.reduce((m,n)=>Math.max(m,n.e),0);
+ build(pd);
+ phrases=[];let cur=null;
+ for(const n of notes){
+  if(!cur||n.s-cur.e>0.8){cur={s:n.s,e:n.e,ns:[]};phrases.push(cur)}
+  cur.ns.push(n);cur.e=n.e;
+ }
+ phrases.forEach(p=>p.text=p.ns.map(n=>n.disp).join(''));
+ $('seek').min=-LEAD;$('seek').max=total+TAIL;t=-LEAD;
+}
+
+// ---- ピッチカーブ生成
+const ease=(sh,u)=>sh==='i'?u*u:sh==='o'?1-(1-u)*(1-u):sh==='l'?u:u*u*(3-2*u);
+function pitOff(n,ms){
+ const d=n.pit;if(d.length<2||ms<d[0].x||ms>d[d.length-1].x)return 0;
+ for(let i=1;i<d.length;i++)if(ms<=d[i].x){const a=d[i-1],b=d[i],u=b.x===a.x?1:(ms-a.x)/(b.x-a.x);return(a.y+(b.y-a.y)*ease(a.shape||'io',u))/10}
+ return 0;
+}
+function vibOff(n,tt){
+ const v=n.vib;if(!v||!v.length)return 0;
+ const L=(n.e-n.s)*v.length/100,x=tt-(n.e-L);if(x<0||L<=0)return 0;
+ const fi=L*(v.in||0)/100,fo=L*(v.out||0)/100;let env=1;
+ if(fi>0)env=Math.min(env,x/fi);if(fo>0)env=Math.min(env,(L-x)/fo);
+ return(v.depth||0)/100*Math.max(0,env)*Math.sin(2*Math.PI*(x/((v.period||175)/1000)+(v.shift||0)/100));
+}
+function pdAt(pd,tt){
+ if(pd.length<2||tt<pd[0].s||tt>pd[pd.length-1].s)return 0;
+ let lo=0,hi=pd.length-1;while(hi-lo>1){const m=(lo+hi)>>1;pd[m].s<=tt?lo=m:hi=m}
+ const a=pd[lo],b=pd[hi],u=b.s===a.s?1:(tt-a.s)/(b.s-a.s);return(a.y+(b.y-a.y)*u)/100;
+}
+function build(pd){
+ const N=Math.ceil(total*RATE)+2;curve=new Float32Array(N).fill(NaN);
+ notes.forEach((n,i)=>{
+  const p=notes[i-1],adj=p&&n.s-p.e<0.03;
+  const k0=Math.max(0,Math.floor((n.s-(adj?0.03:0))*RATE)),k1=Math.min(N-1,Math.ceil(n.e*RATE));
+  for(let k=k0;k<k1;k++){
+   const tt=k/RATE;let v=n.tone;
+   if(adj&&tt<n.s+0.03){const u=Math.max(0,Math.min(1,(tt-(n.s-0.03))/0.06));v=p.tone+(n.tone-p.tone)*(u*u*(3-2*u))}
+   curve[k]=v+pitOff(n,(tt-n.s)*1000)+vibOff(n,tt)+pdAt(pd,tt);
+  }
+ });
+}
+
+// ---- 描画
+function cam(tt){
+ if(!notes.length)return 60;
+ // 再生中(直近に開始した)ノートを中央に。次のノート開始の直前だけ滑らかに移動して、開始時に中央に来る
+ let i=-1;for(let k=0;k<notes.length;k++){if(notes[k].s<=tt)i=k;else break}
+ if(i<0)return notes[0].tone;
+ const cur=notes[i],nx=notes[i+1];
+ if(nx){const d=nx.s-tt,TR=0.15;if(d<TR){const u=1-d/TR,e=u*u*(3-2*u);return cur.tone+(nx.tone-cur.tone)*e}}
+ return cur.tone;
+}
+function rr(x,y,w,h,r){ctx.beginPath();ctx.roundRect(x,y,w,h,r)}
+function draw(tt){
+ const sc=cv.width/W,clear=$('bg').value==='clear',glow=$('glow').checked;
+ const NC=$('ncol').value,PC=$('pcol').value;
+ cv.classList.toggle('clear',clear);
+ ctx.setTransform(sc,0,0,sc,0,0);
+ ctx.shadowBlur=0;ctx.globalAlpha=1;
+ if(clear)ctx.clearRect(0,0,W,H);else{ctx.fillStyle='#0a0b0d';ctx.fillRect(0,0,W,H)}
+ if(!notes.length){ctx.fillStyle='#777';ctx.font=`24px ${FONT}`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('ustxファイルを選択してください',W/2,H/2);return}
+ const px=W/+$('hz').value,X0=W*.33,sp=+$('vz').value,nh=Math.max(12,sp*.8),cy=H*.45,c=cam(tt);
+ const Y=v=>cy-(v-c)*sp;
+ ctx.textBaseline='middle';
+ for(const n of notes){
+  const x=X0+(n.s-tt)*px,w=Math.max(4,(n.e-n.s)*px-3);
+  if(x>W||x+w<0)continue;
+  const y=Y(n.tone)-nh/2,on=tt>=n.s&&tt<n.e;
+  ctx.globalAlpha=tt>=n.e?.45:1;
+  ctx.save();
+  if(glow){ctx.shadowColor=NC;ctx.shadowBlur=on?22:8}
+  rr(x,y,w,nh,4);
+  if(on){ctx.fillStyle=NC;ctx.fill()}
+  else{ctx.fillStyle=clear?rgba('#0a0b0d',.55):rgba(NC,.08);ctx.fill();ctx.strokeStyle=rgba(NC,.9);ctx.lineWidth=1.5;ctx.stroke()}
+  ctx.restore();
+  ctx.save();rr(x,y,w,nh,4);ctx.clip();
+  ctx.fillStyle=on?'#101214':rgba(NC,.85);ctx.font=`${Math.min(13,nh-4)}px ${FONT}`;ctx.textAlign='left';ctx.fillText(n.disp,x+4,y+nh/2+1);
+  ctx.restore();
+  ctx.fillStyle=rgba(NC,.6);ctx.font=`11px ${FONT}`;ctx.textAlign='left';ctx.fillText(n.rom,x,y-9);
+ }
+ ctx.globalAlpha=1;
+ // ピッチ線(再生位置まで)
+ const kEnd=Math.min(curve.length-1,Math.floor(tt*RATE)),kStart=Math.max(0,Math.floor((tt-X0/px)*RATE));
+ ctx.save();
+ if(glow){ctx.shadowColor=PC;ctx.shadowBlur=14}
+ ctx.strokeStyle=PC;ctx.lineWidth=3;ctx.lineJoin='round';ctx.lineCap='round';
+ ctx.beginPath();let pen=false;
+ for(let k=kStart;k<=kEnd;k++){
+  const v=curve[k];if(!(v===v)){pen=false;continue}
+  const x=X0+(k/RATE-tt)*px,y=Y(v);pen?ctx.lineTo(x,y):ctx.moveTo(x,y);pen=true;
+ }
+ ctx.stroke();
+ const cv0=curve[kEnd];
+ if(kEnd>=0&&cv0===cv0){ctx.fillStyle=PC;ctx.beginPath();ctx.arc(X0,Y(cv0),5,0,7);ctx.fill()}
+ ctx.restore();
+ // 字幕
+ if($('sub').checked){
+  const ph=phrases.find(p=>tt>=p.s-.3&&tt<=p.e+.6);
+  if(ph){
+   ctx.font=`bold 30px ${FONT}`;ctx.textAlign='left';
+   const x0=(W-ctx.measureText(ph.text).width)/2,yy=H*.86;
+   ctx.fillStyle=clear?'rgba(160,160,165,.55)':'#4a4d52';ctx.fillText(ph.text,x0,yy);
+   let sung='';for(const n of ph.ns)if(n.s<=tt)sung+=n.disp;
+   ctx.fillStyle='#e0e0e0';ctx.fillText(sung,x0,yy);
+  }
+ }
+}
+
+// ---- 再生・録画
+function tick(now){
+ const dt=(now-last)/1000;last=now;
+ if(playing){t+=dt;if(t>=total+TAIL){t=total+TAIL;playing=false;$('pb').textContent='再生';if(rec)rec.stop()}}
+ draw(t);
+ $('seek').value=t;$('tl').textContent=`${Math.max(0,t).toFixed(2)} / ${total.toFixed(2)}`;
+ requestAnimationFrame(tick);
+}
+function startRec(){
+ if(!notes.length)return;
+ const st=cv.captureStream(+$('fps').value);
+ const mt=['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'].find(m=>MediaRecorder.isTypeSupported(m));
+ const ch=[];rec=new MediaRecorder(st,{mimeType:mt,videoBitsPerSecond:12e6});
+ rec.ondataavailable=e=>{if(e.data.size)ch.push(e.data)};
+ rec.onstop=()=>{
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob(ch,{type:'video/webm'}));
+  a.download=((doc&&doc.name)||'pitch')+'.webm';a.click();rec=null;
+  $('rb').disabled=false;$('rb').textContent='動画を書き出し(WebM)';
+ };
+ t=-LEAD;playing=true;$('pb').textContent='停止';rec.start();
+ $('rb').disabled=true;$('rb').textContent='録画中…';
+}
+
+$('file').onchange=async e=>{const f=e.target.files[0];if(f)try{load(await f.text())}catch(err){alert('読み込みに失敗しました: '+err.message)}};
+$('part').onchange=setup;
+$('ppre').onchange=e=>{if(e.target.value){$('pcol').value=e.target.value;e.target.value=''}};
+$('npre').onchange=e=>{if(e.target.value){$('ncol').value=e.target.value;e.target.value=''}};
+$('pb').onclick=()=>{if(!notes.length)return;if(t>=total+TAIL)t=-LEAD;playing=!playing;$('pb').textContent=playing?'停止':'再生'};
+$('seek').oninput=e=>{t=+e.target.value};
+$('res').onchange=e=>{const r=+e.target.value;cv.width=W*r;cv.height=H*r};
+$('rb').onclick=startRec;
+requestAnimationFrame(n=>{last=n;tick(n)});
+</script>
+</body></html>
