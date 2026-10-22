@@ -32,7 +32,9 @@ small{color:#8a8d92}
 <div class="row">
  <label>横 <input type="range" id="hz" min="2" max="10" step="0.5" value="5"></label>
  <label>縦 <input type="range" id="vz" min="8" max="40" step="1" value="22"></label>
- <label>追従なめらかさ <input type="range" id="sm" min="0" max="0.6" step="0.02" value="0.25"></label>
+ <label>再生位置 <input type="range" id="xp" min="0.2" max="0.8" step="0.01" value="0.5"></label>
+ <label>終了後の余白(秒) <input type="number" id="tail" min="0" max="30" step="0.5" value="3" style="width:64px;background:#2a2c31;color:#dcdee1;border:1px solid #3d4046;border-radius:6px;padding:5px 6px;font:inherit"></label>
+ <label>追従なめらかさ<input type="range" id="sm" min="0" max="0.6" step="0.02" value="0.25"></label>
  <label>画質 <select id="res"><option value="1">1280×720</option><option value="1.5">1920×1080</option></select></label>
  <label>fps <select id="fps"><option>30</option><option>60</option></select></label>
 </div>
@@ -53,7 +55,7 @@ small{color:#8a8d92}
 <script>
 const $=id=>document.getElementById(id);
 const cv=$('cv'),ctx=cv.getContext('2d',{alpha:true});
-const W=1280,H=720,RATE=100,LEAD=1.5,TAIL=1;
+const W=1280,H=720,RATE=100,LEAD=1.5;let TAIL=3;
 const FONT="'ほのか新アンティーク角','Hiragino Sans','Yu Gothic',sans-serif";
 let doc=null,parts=[],notes=[],phrases=[],curve=new Float32Array(0),total=0,t=-LEAD,playing=false,last=0,rec=null,tempos=[],res=480;
 
@@ -180,7 +182,7 @@ function draw(tt){
  ctx.shadowBlur=0;ctx.globalAlpha=1;
  if(clear)ctx.clearRect(0,0,W,H);else{ctx.fillStyle='#0a0b0d';ctx.fillRect(0,0,W,H)}
  if(!notes.length){ctx.fillStyle='#777';ctx.font=`24px ${FONT}`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('ustxファイルを選択してください',W/2,H/2);return}
- const px=W/+$('hz').value,X0=W*.33,sp=+$('vz').value,nh=Math.max(12,sp*.8),cy=H*.45,c=cam(tt);
+ const px=W/+$('hz').value,X0=W*(+$('xp').value),sp=+$('vz').value,nh=Math.max(12,sp*.8),cy=H*.45,c=cam(tt);
  const Y=v=>cy-(v-c)*sp;
  ctx.textBaseline='middle';
  for(const n of notes){
@@ -253,6 +255,7 @@ function startRec(){
 $('file').onchange=async e=>{const f=e.target.files[0];if(f)try{load(await f.text())}catch(err){alert('読み込みに失敗しました: '+err.message)}};
 $('part').onchange=setup;
 $('sm').oninput=buildCam;
+$('tail').oninput=e=>{TAIL=Math.max(0,+e.target.value||0);buildCam();$('seek').max=total+TAIL;if(t>total+TAIL)t=total+TAIL};
 $('ppre').onchange=e=>{if(e.target.value){$('pcol').value=e.target.value;e.target.value=''}};
 $('npre').onchange=e=>{if(e.target.value){$('ncol').value=e.target.value;e.target.value=''}};
 $('pb').onclick=()=>{if(!notes.length)return;if(t>=total+TAIL)t=-LEAD;playing=!playing;$('pb').textContent=playing?'停止':'再生'};
