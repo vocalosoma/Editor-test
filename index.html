@@ -32,6 +32,7 @@ small{color:#8a8d92}
 <div class="row">
  <label>横 <input type="range" id="hz" min="2" max="10" step="0.5" value="5"></label>
  <label>縦 <input type="range" id="vz" min="8" max="40" step="1" value="22"></label>
+ <label>追従なめらかさ <input type="range" id="sm" min="0" max="0.6" step="0.02" value="0.25"></label>
  <label>画質 <select id="res"><option value="1">1280×720</option><option value="1.5">1920×1080</option></select></label>
  <label>fps <select id="fps"><option>30</option><option>60</option></select></label>
 </div>
@@ -105,7 +106,7 @@ function setup(){
  }
  notes.sort((a,b)=>a.s-b.s);pd.sort((a,b)=>a.s-b.s);
  total=notes.reduce((m,n)=>Math.max(m,n.e),0);
- build(pd);
+ build(pd);buildCam();
  phrases=[];let cur=null;
  for(const n of notes){
   if(!cur||n.s-cur.e>0.8){cur={s:n.s,e:n.e,ns:[]};phrases.push(cur)}
@@ -149,13 +150,26 @@ function build(pd){
 
 // ---- 描画
 function cam(tt){
- if(!notes.length)return 60;
- // 再生中(直近に開始した)ノートを中央に。次のノート開始の直前だけ滑らかに移動して、開始時に中央に来る
- let i=-1;for(let k=0;k<notes.length;k++){if(notes[k].s<=tt)i=k;else break}
- if(i<0)return notes[0].tone;
- const cur=notes[i],nx=notes[i+1];
- if(nx){const d=nx.s-tt,TR=0.15;if(d<TR){const u=1-d/TR,e=u*u*(3-2*u);return cur.tone+(nx.tone-cur.tone)*e}}
- return cur.tone;
+ if(!camArr.length)return 60;
+ const f=Math.max(0,Math.min(camArr.length-1.001,(tt+LEAD)*RATE)),i=Math.floor(f),u=f-i;
+ return camArr[i]+(camArr[i+1]-camArr[i])*u;
+}
+// カメラ位置を事前計算(再生中ノートを狙い、なめらかに追従。シークしても同じ結果)
+let camArr=new Float32Array(0);
+function buildCam(){
+ if(!notes.length){camArr=new Float32Array(0);return}
+ const tau=+$('sm').value,N=Math.ceil((total+TAIL+LEAD)*RATE)+3,AHEAD=Math.min(0.12,tau*0.6);
+ const a=new Float32Array(N);let p=-1;
+ for(let k=0;k<N;k++){
+  const look=k/RATE-LEAD+AHEAD;
+  while(p+1<notes.length&&notes[p+1].s<=look)p++;
+  a[k]=p<0?notes[0].tone:notes[p].tone;
+ }
+ if(tau>0){
+  const al=1-Math.exp(-1/(RATE*tau));
+  for(let pass=0;pass<2;pass++){let y=a[0];for(let k=0;k<N;k++){y+=(a[k]-y)*al;a[k]=y}}
+ }
+ camArr=a;
 }
 function rr(x,y,w,h,r){ctx.beginPath();ctx.roundRect(x,y,w,h,r)}
 function draw(tt){
@@ -238,6 +252,7 @@ function startRec(){
 
 $('file').onchange=async e=>{const f=e.target.files[0];if(f)try{load(await f.text())}catch(err){alert('読み込みに失敗しました: '+err.message)}};
 $('part').onchange=setup;
+$('sm').oninput=buildCam;
 $('ppre').onchange=e=>{if(e.target.value){$('pcol').value=e.target.value;e.target.value=''}};
 $('npre').onchange=e=>{if(e.target.value){$('ncol').value=e.target.value;e.target.value=''}};
 $('pb').onclick=()=>{if(!notes.length)return;if(t>=total+TAIL)t=-LEAD;playing=!playing;$('pb').textContent=playing?'停止':'再生'};
