@@ -126,6 +126,16 @@ output.v{color:var(--mu);font-variant-numeric:tabular-nums;min-width:2.8em;text-
   <span class="hint">区切り間隔を変えると、字幕テキストは再生成されます。</span></div></div>
 </div></details>
 
+<details open><summary>ノート内の歌詞(日本語・ローマ字)</summary><div class="grid">
+ <div class="wide hint">1行=1フレーズ、ノートごとに半角/全角スペースで区切って入力します(例: 「光 る お 空」)。ノートを空にしたい所は「-」。区切りの数がノート数と合わない行は下に警告が出ます(足りない分は空になります)。空行にすると自動(ustxの歌詞)に戻ります。表示のオン/オフは「ノート・ピッチ線」の設定です。</div>
+ <label class="wide">ノート内に表示する歌詞(日本語)
+  <textarea id="nlyr" spellcheck="false" placeholder="ustxを読み込むと、ノートごとの歌詞がスペース区切りで入ります"></textarea></label>
+ <label class="wide">ノートの上に表示するローマ字
+  <textarea id="rlyr" spellcheck="false" placeholder="ustxを読み込むと、自動生成したローマ字が入ります"></textarea></label>
+ <div class="wide row"><button id="nAuto">日本語をustxの歌詞に戻す</button><button id="rAuto">ローマ字を自動生成に戻す</button><button id="nKata">日本語をカタカナに</button><button id="nHira">日本語をひらがなに</button></div>
+ <div class="wide hint" id="nlst" style="color:#e8b26a"></div>
+</div></details>
+
 <details><summary>タイトル・演出</summary><div class="grid">
  <label>曲名<input type="text" id="title" placeholder="曲名"></label>
  <label>アーティスト・クレジット<input type="text" id="artist" placeholder="歌唱: ○○ / 作曲: ○○"></label>
@@ -266,6 +276,27 @@ function buildPhrases(){
  }
  phrases.forEach(p=>{p.auto=p.ns.map(n=>n.disp).join('');p.text=p.auto;p.rom=p.ns.map(n=>n.rom).filter(Boolean).join(' ')});
  $('lyr').value=phrases.map(p=>p.auto).join('\n');
+ fillNoteLyr(true,true);
+}
+const tok=s=>s===''?'-':s.replace(/\s+/g,'_');
+function fillNoteLyr(a,b){
+ if(a)$('nlyr').value=phrases.map(p=>p.ns.map(n=>tok(n.disp)).join(' ')).join('\n');
+ if(b)$('rlyr').value=phrases.map(p=>p.ns.map(n=>tok(n.rom)).join(' ')).join('\n');
+ applyNoteLyr();
+}
+function applyNoteLyr(){
+ const A=$('nlyr').value.split('\n'),B=$('rlyr').value.split('\n'),msg=[];
+ const sp=s=>(s||'').trim().split(/[\s　]+/).filter(Boolean);
+ phrases.forEach((p,i)=>{
+  const ta=sp(A[i]),tb=sp(B[i]);
+  p.ns.forEach((n,j)=>{
+   n.ldisp=ta.length?(ta[j]===undefined||ta[j]==='-'?'':ta[j]):n.disp;
+   n.lrom=tb.length?(tb[j]===undefined||tb[j]==='-'?'':tb[j]):n.rom;
+  });
+  if(ta.length&&ta.length!==p.ns.length)msg.push(`日本語 ${i+1}行目: ${ta.length}個(ノート${p.ns.length}個)`);
+  if(tb.length&&tb.length!==p.ns.length)msg.push(`ローマ字 ${i+1}行目: ${tb.length}個(ノート${p.ns.length}個)`);
+ });
+ $('nlst').textContent=msg.length?'⚠ 数が合わない行: '+msg.slice(0,4).join(' / ')+(msg.length>4?` ほか${msg.length-4}件`:''):'';
 }
 function applyLyr(){
  const lines=$('lyr').value.split('\n');
@@ -552,12 +583,12 @@ function draw(tt){
    ctx.save();rr(x,y,w,nh,r4);ctx.clip();
    ctx.font=`${Math.min(13,nh-4)}px ${FONT}`;ctx.textAlign='left';
    if(on){
-    ctx.save();ctx.beginPath();ctx.rect(x,y,w*(wipe?prog:1),nh);ctx.clip();ctx.fillStyle='#101214';ctx.fillText(n.disp,x+4,y+nh/2+1);ctx.restore();
-    if(wipe){ctx.save();ctx.beginPath();ctx.rect(x+w*prog,y,w,nh);ctx.clip();ctx.fillStyle=rgba(NC,.95);ctx.fillText(n.disp,x+4,y+nh/2+1);ctx.restore()}
-   }else{ctx.fillStyle=rgba(NC,.85);ctx.fillText(n.disp,x+4,y+nh/2+1)}
+    ctx.save();ctx.beginPath();ctx.rect(x,y,w*(wipe?prog:1),nh);ctx.clip();ctx.fillStyle='#101214';ctx.fillText(n.ldisp,x+4,y+nh/2+1);ctx.restore();
+    if(wipe){ctx.save();ctx.beginPath();ctx.rect(x+w*prog,y,w,nh);ctx.clip();ctx.fillStyle=rgba(NC,.95);ctx.fillText(n.ldisp,x+4,y+nh/2+1);ctx.restore()}
+   }else{ctx.fillStyle=rgba(NC,.85);ctx.fillText(n.ldisp,x+4,y+nh/2+1)}
    ctx.restore();
   }
-  if(showR&&n.rom){ctx.fillStyle=rgba(NC,.6);ctx.font=`11px ${FONT}`;ctx.textAlign='left';ctx.fillText(n.rom,x,y-9)}
+  if(showR&&n.lrom){ctx.fillStyle=rgba(NC,.6);ctx.font=`11px ${FONT}`;ctx.textAlign='left';ctx.fillText(n.lrom,x,y-9)}
  }
  ctx.globalAlpha=1;
  // ピッチ線
@@ -682,7 +713,12 @@ $('lead').oninput=()=>{LEAD=nm('lead');buildCam();$('seek').min=-LEAD;if(t<-LEAD
 $('tail').oninput=()=>{TAIL=nm('tail');buildCam();$('seek').max=total+TAIL;if(t>total+TAIL)t=total+TAIL};
 $('gap').oninput=()=>{if(notes.length)buildPhrases()};
 $('lyr').oninput=applyLyr;
-$('lyrAuto').onclick=()=>{if(notes.length)buildPhrases()};
+$('lyrAuto').onclick=()=>{if(notes.length){$('lyr').value=phrases.map(p=>p.auto).join('\n');applyLyr()}};
+$('nlyr').oninput=applyNoteLyr;$('rlyr').oninput=applyNoteLyr;
+$('nAuto').onclick=()=>{if(notes.length)fillNoteLyr(true,false)};
+$('rAuto').onclick=()=>{if(notes.length)fillNoteLyr(false,true)};
+$('nKata').onclick=()=>{$('nlyr').value=$('nlyr').value.replace(/[ぁ-ゖ]/g,c=>String.fromCharCode(c.charCodeAt(0)+0x60));applyNoteLyr()};
+$('nHira').onclick=()=>{$('nlyr').value=$('nlyr').value.replace(/[ァ-ヶ]/g,c=>String.fromCharCode(c.charCodeAt(0)-0x60));applyNoteLyr()};
 $('lrcBtn').onclick=()=>{if(phrases.length)dl(new Blob([phrases.map(p=>fmtLRC(p.s)+p.text).join('\n')],{type:'text/plain;charset=utf-8'}),baseName()+'.lrc')};
 $('srtBtn').onclick=()=>{if(phrases.length)dl(new Blob([phrases.map((p,i)=>`${i+1}\n${fmtSRT(p.s)} --> ${fmtSRT(p.e+.2)}\n${p.text}\n`).join('\n')],{type:'text/plain;charset=utf-8'}),baseName()+'.srt')};
 function applyLayout(){
