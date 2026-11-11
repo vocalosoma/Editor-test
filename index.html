@@ -32,6 +32,9 @@ summary{padding:8px 12px;cursor:pointer;font-weight:600}
 output.v{color:var(--mu);font-variant-numeric:tabular-nums;min-width:2.8em;text-align:right}
 .pair{display:flex;gap:6px;align-items:center}
 #st{color:#9fd8b0}
+#stage.pin{position:sticky;top:0;z-index:20;background:var(--bg);padding:6px 0 4px;box-shadow:0 8px 14px -6px rgba(0,0,0,.6)}
+#stage.pin canvas{max-height:var(--ph,38vh);margin:0 auto}
+#stage .row{margin:6px 0 0}
 </style></head><body>
 <h1>USTX ピッチ追従動画メーカー</h1>
 <div class="row">
@@ -41,11 +44,13 @@ output.v{color:var(--mu);font-variant-numeric:tabular-nums;min-width:2.8em;text-
   <option value="neon">ネオン(シアン×レッド)</option><option value="cyber">サイバー(ピンク×シアン)</option><option value="mint">ミント(グリーン×イエロー)</option><option value="sunset">サンセット</option><option value="ice">アイス</option><option value="mono">モノクロ</option></select></label>
  <span id="st"></span>
 </div>
+<div id="stage">
 <canvas id="cv" width="1280" height="720"></canvas>
 <div class="row">
  <button id="pb">再生</button>
  <input type="range" id="seek" min="0" max="1" step="0.01" value="0">
  <span id="tl">0.00 / 0.00</span>
+</div>
 </div>
 <small>Space: 再生/停止　←/→: 5秒移動(Shiftで1秒)　ustx・音声・背景画像はウィンドウへドラッグ&ドロップでも読み込めます。設定はこのブラウザに自動保存されます。</small>
 
@@ -59,6 +64,8 @@ output.v{color:var(--mu);font-variant-numeric:tabular-nums;min-width:2.8em;text-
 </div></details>
 
 <details open><summary>レイアウト・タイミング</summary><div class="grid">
+ <label class="inline"><input type="checkbox" id="pin" data-s checked> プレビューを画面上部に固定(スクロールしても動画が見える)</label>
+ <label>固定時のプレビュー高さ(画面の%)<input type="range" id="pinh" min="20" max="70" step="1" value="38" data-s></label>
  <label>画面比率<select id="aspect" data-s><option value="16:9">16:9 横(YouTube)</option><option value="9:16">9:16 縦(Shorts/TikTok)</option><option value="1:1">1:1 正方形</option></select></label>
  <label>画質<select id="qual" data-s><option value="1">標準 ×1(720p相当)</option><option value="1.5">高 ×1.5(1080p相当)</option><option value="2">最高 ×2(重い)</option></select></label>
  <label>fps<select id="fps" data-s><option>30</option><option>60</option></select></label>
@@ -104,18 +111,24 @@ output.v{color:var(--mu);font-variant-numeric:tabular-nums;min-width:2.8em;text-
  <label class="inline"><input type="checkbox" id="keys" data-s> 左に鍵盤を表示</label>
  <label class="inline"><input type="checkbox" id="nlyric" data-s checked> ノート内に歌詞</label>
  <label class="inline"><input type="checkbox" id="nrom" data-s checked> ノート上にローマ字</label>
+ <label>ノート歌詞の位置<select id="nlpos" data-s><option value="in">ノートの中(従来)</option><option value="above">ノートの上(大きく・縁取り)</option></select></label>
+ <label>ノート歌詞の文字サイズ<input type="range" id="nls" min="10" max="30" step="1" value="14" data-s></label>
+ <label>ローマ字の文字サイズ<input type="range" id="nrs" min="9" max="24" step="1" value="12" data-s></label>
 </div></details>
 
 <details open><summary>歌詞・字幕</summary><div class="grid">
+ <label>字幕スタイル<select id="smode" data-s><option value="clear">見やすい(背景プレート+折り返し)</option><option value="classic">従来</option></select></label>
+ <label>背景プレートの濃さ(見やすいモード)<input type="range" id="splate" min="0" max="0.9" step="0.05" value="0.55" data-s></label>
+ <label class="inline"><input type="checkbox" id="swrap" data-s checked> 長い行は2行に折り返す(見やすいモード)</label>
  <label class="inline"><input type="checkbox" id="sub" data-s checked> 字幕を表示</label>
  <label class="inline"><input type="checkbox" id="karaoke" data-s checked> カラオケ風に滑らかに塗る</label>
  <label class="inline"><input type="checkbox" id="snext" data-s checked> 次のフレーズを予告表示</label>
  <label class="inline"><input type="checkbox" id="srom" data-s> ローマ字を下に表示</label>
  <label class="inline"><input type="checkbox" id="sglow" data-s checked> 歌唱済み部分を光らせる</label>
  <label class="inline"><input type="checkbox" id="sbold" data-s checked> 太字</label>
- <label>文字サイズ<input type="range" id="ssz" min="18" max="64" step="1" value="34" data-s></label>
+ <label>文字サイズ<input type="range" id="ssz" min="18" max="64" step="1" value="38" data-s></label>
  <label>縦位置(%)<input type="range" id="sy" min="55" max="95" step="1" value="86" data-s></label>
- <label>縁取りの太さ<input type="range" id="sout" min="0" max="8" step="0.5" value="3" data-s></label>
+ <label>縁取りの太さ<input type="range" id="sout" min="0" max="8" step="0.5" value="4" data-s></label>
  <label>字幕を早く出す(秒)<input type="range" id="slead" min="0" max="1.5" step="0.05" value="0.3" data-s></label>
  <label>フレーズの区切り間隔(秒)<input type="range" id="gap" min="0.2" max="3" step="0.1" value="0.8" data-s></label>
  <label>フォント<select id="sfont" data-s><option value="">既定(ゴシック)</option><option value="mincho">明朝</option><option value="maru">丸ゴシック</option></select></label>
@@ -162,6 +175,7 @@ let W=1280,H=720,LEAD=3,TAIL=4,tscale=1,beats=[];
 const FONT="'ほのか新アンティーク角','Hiragino Sans','Yu Gothic',sans-serif";
 let doc=null,parts=[],notes=[],phrases=[],curve=new Float32Array(0),camArr=new Float32Array(0),total=0,t=-LEAD,playing=false,last=0,rec=null,tempos=[],res=480,bgImg=null;
 const rgba=(h,a)=>{const n=parseInt(h.slice(1),16);return `rgba(${n>>16&255},${n>>8&255},${n&255},${a})`};
+const mix=(h,k)=>{const n=parseInt(h.slice(1),16),f=c=>Math.round(c+(255-c)*k);return `rgb(${f(n>>16&255)},${f(n>>8&255)},${f(n&255)})`};
 const clamp=(x,a=0,b=1)=>Math.max(a,Math.min(b,x));
 const hs=k=>{const x=Math.sin(k*12.9898+78.233)*43758.5453;return x-Math.floor(x)};
 const setSt=s=>{$('st').textContent=s||''};
@@ -438,6 +452,7 @@ function wipeW(p,tt,w,smooth){
  let done=0;for(let i=0;i<k;i++)done+=wt[i];if(k<ns.length)done+=wt[k]*fr;
  return w*done/sum;
 }
+// ---- 字幕(従来スタイル) ----
 function drawLine(p,tt,y,sz,active){
  let s=sz;setFont(s);let w=ctx.measureText(p.text).width;
  const maxW=W*.92-(ck('keys')?54:0);
@@ -478,6 +493,99 @@ function drawSubs(tt){
  }else if(ck('snext')&&nxt&&nxt.s-slead-tt<3){
   ctx.globalAlpha=.6*clamp((3-(nxt.s-slead-tt))/.5);
   drawLine(nxt,tt,y0,sz,false);
+ }
+ ctx.restore();
+}
+// ---- 字幕(見やすいスタイル: 背景プレート+折り返し) ----
+function layoutText(text,sz,maxW,wrap){
+ setFont(sz);let w=ctx.measureText(text).width;
+ if(w<=maxW)return{s:sz,lines:[text],ws:[w],w};
+ if(wrap){
+  const ch=[...text],mid=ch.length/2;let bi=-1,bs=1e9;
+  for(let i=1;i<ch.length;i++){
+   let sc=Math.abs(i-mid);
+   if(' 　、。,.!?!?」』)'.includes(ch[i-1])||' 　'.includes(ch[i]))sc-=3;
+   if(sc<bs){bs=sc;bi=i}
+  }
+  if(bi>0){
+   const a=ch.slice(0,bi).join(''),b=ch.slice(bi).join('');
+   let w1=ctx.measureText(a).width,w2=ctx.measureText(b).width,m=Math.max(w1,w2),s=sz;
+   if(m>maxW){s=sz*maxW/m;setFont(s);w1=ctx.measureText(a).width;w2=ctx.measureText(b).width}
+   return{s,lines:[a,b],ws:[w1,w2],w:w1+w2};
+  }
+ }
+ const s=sz*maxW/w;setFont(s);w=ctx.measureText(text).width;
+ return{s,lines:[text],ws:[w],w};
+}
+function drawPhraseClear(p,L,cx,top,lh,tt,active,ow){
+ let wp=0;
+ if(active){setFont(L.s);wp=wipeW(p,tt,L.w,ck('karaoke'))}
+ let off=0;
+ ctx.textAlign='left';ctx.textBaseline='middle';
+ for(let i=0;i<L.lines.length;i++){
+  const x0=cx-L.ws[i]/2,y=top+lh*(i+.5);
+  setFont(L.s);
+  if(ow>0){ctx.save();ctx.lineWidth=ow*2;ctx.lineJoin='round';ctx.strokeStyle=v('ocol');ctx.strokeText(L.lines[i],x0,y);ctx.restore()}
+  ctx.fillStyle=mix(v('ucol'),.3);ctx.fillText(L.lines[i],x0,y);
+  if(active){
+   const c=clamp(wp-off,0,L.ws[i]);
+   if(c>0){
+    ctx.save();ctx.beginPath();ctx.rect(x0-ow-2,y-lh/2-1,c+ow+2,lh+2);ctx.clip();
+    if(ck('sglow')){ctx.shadowColor=v('scol');ctx.shadowBlur=14}
+    ctx.fillStyle=v('scol');ctx.fillText(L.lines[i],x0,y);
+    ctx.restore();
+   }
+  }
+  off+=L.ws[i];
+ }
+}
+function drawSubsClear(tt){
+ if(!phrases.length)return;
+ const sz=nm('ssz'),hold=.6,slead=nm('slead'),ow=nm('sout'),pl=nm('splate'),wrap=ck('swrap');
+ const KWs=ck('keys')?54:0,cx=(W+KWs)/2,maxW=W*.9-KWs;
+ let idx=-1;for(let i=0;i<phrases.length;i++){if(phrases[i].s-slead<=tt)idx=i;else break}
+ const cur=idx>=0&&tt<=phrases[idx].e+hold?phrases[idx]:null,nxt=phrases[idx+1];
+ let main=null,active=false,a=1,sub=null;
+ if(cur){
+  main=cur;active=true;a=clamp((tt-(cur.s-slead))/.18)*clamp((cur.e+hold-tt)/.25);
+  if(ck('snext')&&nxt&&nxt.s-tt<5)sub=nxt;
+ }else if(ck('snext')&&nxt&&nxt.s-slead-tt<3){
+  main=nxt;a=.75*clamp((3-(nxt.s-slead-tt))/.5);
+ }
+ if(!main)return;
+ ctx.save();
+ const padX=Math.max(14,sz*.6),padY=Math.max(8,sz*.3),gap=8;
+ const LM=layoutText(main.text,sz,maxW-padX*2,wrap),lhM=LM.s*1.3,hM=lhM*LM.lines.length;
+ let romS=0,rw=0;
+ if(ck('srom')&&main.rom){
+  romS=Math.max(12,LM.s*.45);ctx.font=`${romS}px ${FONT}`;rw=Math.min(ctx.measureText(main.rom).width,maxW-padX*2);
+ }
+ const hMain=hM+(romS?romS*1.5:0);
+ let LS=null,hS=0,lhS=0;
+ if(sub){LS=layoutText(sub.text,sz*.72,maxW-padX*2,wrap);lhS=LS.s*1.3;hS=lhS*LS.lines.length}
+ const total=hMain+padY*2+(LS?gap+hS+padY*2:0);
+ let top=H*nm('sy')/100-(hM/2+padY);
+ top=Math.max(4,Math.min(top,H-total-12));
+ const plate=(w,h,yy)=>{
+  if(pl<=0)return;
+  ctx.save();ctx.fillStyle=`rgba(0,0,0,${pl})`;ctx.beginPath();ctx.roundRect(cx-w/2,yy,w,h,Math.min(18,h/2.2));ctx.fill();
+  ctx.strokeStyle='rgba(255,255,255,.08)';ctx.lineWidth=1;ctx.stroke();ctx.restore();
+ };
+ ctx.globalAlpha=a;
+ plate(Math.max(...LM.ws,rw)+padX*2,hMain+padY*2,top);
+ drawPhraseClear(main,LM,cx,top+padY,lhM,tt,active,ow);
+ if(romS){
+  ctx.font=`${romS}px ${FONT}`;ctx.textAlign='center';ctx.textBaseline='middle';
+  const ry=top+padY+hM+romS*.75;
+  ctx.strokeStyle=v('ocol');ctx.lineWidth=3;ctx.lineJoin='round';ctx.globalAlpha=a*.9;
+  ctx.strokeText(main.rom,cx,ry,rw);ctx.fillStyle=v('scol');ctx.fillText(main.rom,cx,ry,rw);
+  ctx.globalAlpha=a;
+ }
+ if(LS){
+  const t2=top+hMain+padY*2+gap;
+  ctx.globalAlpha=a*.8;
+  plate(Math.max(...LS.ws)+padX*2,hS+padY*2,t2);
+  drawPhraseClear(sub,LS,cx,t2+padY,lhS,tt,false,ow*.8);
  }
  ctx.restore();
 }
@@ -564,6 +672,7 @@ function draw(tt){
   const b=beats[lo];pul=Math.exp(-(tt-b.s)/b.len*4)*(b.bar?1:.55);
  }
  const wipe=ck('wipe'),showL=ck('nlyric'),showR=ck('nrom'),r4=Math.min(4,nh/2);
+ const nls=nm('nls'),nrs=nm('nrs'),above=v('nlpos')==='above';
  for(const n of notes){
   const x=X0+(n.s-tt)*px,w=Math.max(4,(n.e-n.s)*px-3);
   if(x>W||x+w<KW)continue;
@@ -579,16 +688,30 @@ function draw(tt){
    if(on){ctx.save();ctx.beginPath();ctx.rect(x-2,y-2,w*prog+2,nh+4);ctx.clip();rr(x,y,w,nh,r4);ctx.fillStyle=NC;ctx.fill();ctx.restore()}
   }
   ctx.restore();
-  if(showL&&nh>=12){
+  if(showL&&above){
+   if(n.ldisp){
+    ctx.save();ctx.font=`bold ${nls}px ${FONT}`;ctx.textAlign='left';ctx.textBaseline='middle';
+    const ty=y-nls*.5-3;
+    ctx.lineJoin='round';ctx.lineWidth=4;ctx.strokeStyle='rgba(0,0,0,.85)';ctx.strokeText(n.ldisp,x,ty);
+    ctx.fillStyle=on?mix(NC,.6):v('scol');ctx.fillText(n.ldisp,x,ty);
+    ctx.restore();
+   }
+  }else if(showL&&nh>=12){
    ctx.save();rr(x,y,w,nh,r4);ctx.clip();
-   ctx.font=`${Math.min(13,nh-4)}px ${FONT}`;ctx.textAlign='left';
+   ctx.font=`${Math.min(nls,nh-4)}px ${FONT}`;ctx.textAlign='left';
    if(on){
     ctx.save();ctx.beginPath();ctx.rect(x,y,w*(wipe?prog:1),nh);ctx.clip();ctx.fillStyle='#101214';ctx.fillText(n.ldisp,x+4,y+nh/2+1);ctx.restore();
     if(wipe){ctx.save();ctx.beginPath();ctx.rect(x+w*prog,y,w,nh);ctx.clip();ctx.fillStyle=rgba(NC,.95);ctx.fillText(n.ldisp,x+4,y+nh/2+1);ctx.restore()}
    }else{ctx.fillStyle=rgba(NC,.85);ctx.fillText(n.ldisp,x+4,y+nh/2+1)}
    ctx.restore();
   }
-  if(showR&&n.lrom){ctx.fillStyle=rgba(NC,.6);ctx.font=`11px ${FONT}`;ctx.textAlign='left';ctx.fillText(n.lrom,x,y-9)}
+  if(showR&&n.lrom){
+   ctx.save();ctx.font=`${nrs}px ${FONT}`;ctx.textAlign='left';ctx.textBaseline='middle';
+   const ry=above&&showL?y-nls-8-nrs*.5:y-3-nrs*.7;
+   if(above){ctx.lineJoin='round';ctx.lineWidth=3;ctx.strokeStyle='rgba(0,0,0,.8)';ctx.strokeText(n.lrom,x,ry)}
+   ctx.fillStyle=above?rgba(mix(NC,.4),.9):rgba(NC,.6);ctx.fillText(n.lrom,x,ry);
+   ctx.restore();
+  }
  }
  ctx.globalAlpha=1;
  // ピッチ線
@@ -616,7 +739,7 @@ function draw(tt){
   ctx.restore();
  }
  if(KW)drawKeys(KW,Y,sp,cm,PC,clear,curVal);
- if(ck('sub'))drawSubs(tt);
+ if(ck('sub')){if(v('smode')==='classic')drawSubs(tt);else drawSubsClear(tt)}
  drawOverlays(tt,KW,PC,clear,bgm);
 }
 
@@ -759,6 +882,8 @@ window.addEventListener('drop',async e=>{
  }catch(err){alert('読み込みに失敗しました: '+err.message)}
 });
 
+function applyPin(){$('stage').classList.toggle('pin',ck('pin'));$('stage').style.setProperty('--ph',nm('pinh')+'vh')}
+$('pin').onchange=applyPin;$('pinh').addEventListener('input',applyPin);applyPin();
 LEAD=nm('lead');TAIL=nm('tail');applyLayout();
 requestAnimationFrame(n=>{last=n;tick(n)});
 </script>
