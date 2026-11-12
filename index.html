@@ -140,13 +140,17 @@ output.v{color:var(--mu);font-variant-numeric:tabular-nums;min-width:2.8em;text-
 </div></details>
 
 <details open><summary>ノート内の歌詞(日本語・ローマ字)</summary><div class="grid">
- <div class="wide hint">1行=1フレーズ、ノートごとに半角/全角スペースで区切って入力します(例: 「光 る お 空」)。ノートを空にしたい所は「-」。区切りの数がノート数と合わない行は下に警告が出ます(足りない分は空になります)。空行にすると自動(ustxの歌詞)に戻ります。表示のオン/オフは「ノート・ピッチ線」の設定です。</div>
+ <label class="inline"><input type="checkbox" id="nsplit" data-s checked> スペース無しの行は1音ずつ自動で割り振る(「ひかるおそら」と続けて打てる)</label>
+ <label class="inline"><input type="checkbox" id="nautorom" data-s checked> ローマ字は日本語欄から自動生成(入力不要)</label>
+ <div class="wide hint">1行=1フレーズ。スペース無しで続けて打てば、小さい「ゃゅょ」は前の文字にまとめつつ1音ずつ各ノートに割り振られます(例: 「ひかるおそら」「きゃんでぃ」)。1ノートに複数文字を入れたい/英語の歌詞などは、その行だけスペースで区切ってください(例: 「la la 光 る」。スペースが1つでもあればその行は区切り通りになります)。ノートを空にしたい所は「-」。空行にすると自動(ustxの歌詞)に戻ります。下のプレビューで割り振り結果を確認できます(数が合わない行はオレンジ表示)。表示のオン/オフは「ノート・ピッチ線」の設定です。</div>
  <label class="wide">ノート内に表示する歌詞(日本語)
   <textarea id="nlyr" spellcheck="false" placeholder="ustxを読み込むと、ノートごとの歌詞がスペース区切りで入ります"></textarea></label>
  <label class="wide">ノートの上に表示するローマ字
   <textarea id="rlyr" spellcheck="false" placeholder="ustxを読み込むと、自動生成したローマ字が入ります"></textarea></label>
  <div class="wide row"><button id="nAuto">日本語をustxの歌詞に戻す</button><button id="rAuto">ローマ字を自動生成に戻す</button><button id="nKata">日本語をカタカナに</button><button id="nHira">日本語をひらがなに</button></div>
  <div class="wide hint" id="nlst" style="color:#e8b26a"></div>
+ <div class="wide"><small>割り振りプレビュー(1マス=1ノート)</small>
+  <div id="nprev" style="max-height:220px;overflow:auto;background:#17181b;border:1px solid #33363c;border-radius:6px;padding:6px 8px;font-size:13px;line-height:1.7"></div></div>
 </div></details>
 
 <details><summary>タイトル・演出</summary><div class="grid">
@@ -298,18 +302,32 @@ function fillNoteLyr(a,b){
  if(b)$('rlyr').value=phrases.map(p=>p.ns.map(n=>tok(n.rom)).join(' ')).join('\n');
  applyNoteLyr();
 }
+const SMALLK='ゃゅょぁぃぅぇぉゎャュョァィゥェォヮ';
+function moras(s){const o=[];for(const c of [...s]){if(SMALLK.includes(c)&&o.length)o[o.length-1]+=c;else o.push(c)}return o}
+const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 function applyNoteLyr(){
  const A=$('nlyr').value.split('\n'),B=$('rlyr').value.split('\n'),msg=[];
- const sp=s=>(s||'').trim().split(/[\s　]+/).filter(Boolean);
+ const autoSplit=ck('nsplit'),autoRom=ck('nautorom'),prev=[];
+ $('rlyr').readOnly=autoRom;
+ const sp=(s,split)=>{s=(s||'').trim();if(!s)return[];
+  if(split&&!/[\s　]/.test(s))return moras(s);
+  return s.split(/[\s　]+/).filter(Boolean)};
  phrases.forEach((p,i)=>{
-  const ta=sp(A[i]),tb=sp(B[i]);
+  const ta=sp(A[i],autoSplit),tb=autoRom?[]:sp(B[i],false);
   p.ns.forEach((n,j)=>{
    n.ldisp=ta.length?(ta[j]===undefined||ta[j]==='-'?'':ta[j]):n.disp;
-   n.lrom=tb.length?(tb[j]===undefined||tb[j]==='-'?'':tb[j]):n.rom;
+   if(autoRom){const r=rom(n.ldisp);n.lrom=/^[\x20-\x7e]*$/.test(r)?r:n.rom}
+   else n.lrom=tb.length?(tb[j]===undefined||tb[j]==='-'?'':tb[j]):n.rom;
   });
   if(ta.length&&ta.length!==p.ns.length)msg.push(`日本語 ${i+1}行目: ${ta.length}個(ノート${p.ns.length}個)`);
   if(tb.length&&tb.length!==p.ns.length)msg.push(`ローマ字 ${i+1}行目: ${tb.length}個(ノート${p.ns.length}個)`);
+  const ok=!ta.length||ta.length===p.ns.length;
+  prev.push(`<div style="padding:2px 0;${ok?'':'color:#e8b26a'}"><b style="color:#8a8d92;display:inline-block;min-width:2.2em">${i+1}</b>`+
+   p.ns.map(n=>`<span style="display:inline-block;min-width:1.4em;text-align:center;margin:1px;padding:0 4px;border:1px solid #3d4046;border-radius:4px">${esc(n.ldisp)||'&nbsp;'}</span>`).join('')+
+   (ta.length>p.ns.length?` <span style="color:#e8b26a">+余り: ${esc(ta.slice(p.ns.length).join(''))}</span>`:'')+`</div>`);
  });
+ if(autoRom)$('rlyr').value=phrases.map(p=>p.ns.map(n=>tok(n.lrom)).join(' ')).join('\n');
+ $('nprev').innerHTML=prev.join('');
  $('nlst').textContent=msg.length?'⚠ 数が合わない行: '+msg.slice(0,4).join(' / ')+(msg.length>4?` ほか${msg.length-4}件`:''):'';
 }
 function applyLyr(){
@@ -838,6 +856,7 @@ $('gap').oninput=()=>{if(notes.length)buildPhrases()};
 $('lyr').oninput=applyLyr;
 $('lyrAuto').onclick=()=>{if(notes.length){$('lyr').value=phrases.map(p=>p.auto).join('\n');applyLyr()}};
 $('nlyr').oninput=applyNoteLyr;$('rlyr').oninput=applyNoteLyr;
+$('nsplit').onchange=applyNoteLyr;$('nautorom').onchange=applyNoteLyr;
 $('nAuto').onclick=()=>{if(notes.length)fillNoteLyr(true,false)};
 $('rAuto').onclick=()=>{if(notes.length)fillNoteLyr(false,true)};
 $('nKata').onclick=()=>{$('nlyr').value=$('nlyr').value.replace(/[ぁ-ゖ]/g,c=>String.fromCharCode(c.charCodeAt(0)+0x60));applyNoteLyr()};
