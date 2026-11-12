@@ -32,6 +32,14 @@ summary{padding:8px 12px;cursor:pointer;font-weight:600}
 output.v{color:var(--mu);font-variant-numeric:tabular-nums;min-width:2.8em;text-align:right}
 .pair{display:flex;gap:6px;align-items:center}
 #st{color:#9fd8b0}
+#ned{position:relative;max-height:46vh;overflow:auto;background:#17181b;border:1px solid #33363c;border-radius:6px;padding:4px 8px}
+#ned:empty::before{content:'ustxを読み込むと、ここにノートごとの入力欄が並びます';color:var(--mu)}
+.nrow{padding:5px 0;border-bottom:1px solid #26282d}.nrow:last-child{border:0}
+.nhd{font-size:12px;color:var(--mu);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+.ncells{display:flex;flex-wrap:wrap;gap:4px}
+input.ncell{width:3.4em;min-width:0;box-sizing:border-box;text-align:center;padding:5px 2px;font-size:15px}
+input.ncell:focus{outline:2px solid #00f0ff;background:#1c3a40}
+input.ncell.pl{border-color:#ff2a3d;background:#3a1d22}
 #stage.pin{position:sticky;top:0;z-index:20;background:var(--bg);padding:6px 0 4px;box-shadow:0 8px 14px -6px rgba(0,0,0,.6)}
 #stage.pin canvas{max-height:var(--ph,38vh);margin:0 auto}
 #stage .row{margin:6px 0 0}
@@ -140,17 +148,22 @@ output.v{color:var(--mu);font-variant-numeric:tabular-nums;min-width:2.8em;text-
 </div></details>
 
 <details open><summary>ノート内の歌詞(日本語・ローマ字)</summary><div class="grid">
- <label class="inline"><input type="checkbox" id="nsplit" data-s checked> スペース無しの行は1音ずつ自動で割り振る(「ひかるおそら」と続けて打てる)</label>
+ <div class="wide hint"><b>ノートごとの入力欄に直接打ち込みます。</b>欄をクリックすると、上のプレビューがそのノートの位置に移ります(再生すると今鳴っているノートが赤く光り、一覧も自動で追従します)。<br>
+ ・<b>Enter / Space / →</b> で次のノート、<b>Shift+Enter / ←</b> で前のノート、空欄で <b>Backspace</b> でも前に戻ります。日本語変換中のEnterは変換の確定になり、確定と同時に次の欄へ進みます。<br>
+ ・「ひかるおそら」のように<b>続けて打つ/貼り付ける</b>と、次のノートから1音ずつ自動で入ります(「きゃ」「でぃ」は1音)。<br>
+ ・欄を空にするとそのノートは歌詞なし。欄の上にマウスを置くと元のustxの歌詞が出ます。</div>
+ <label class="inline"><input type="checkbox" id="nsplit" data-s checked> 複数文字を入力/貼り付けしたら次のノートへ1音ずつ振り分ける(英語の歌詞など1ノートに複数文字入れるときはオフ)</label>
  <label class="inline"><input type="checkbox" id="nautorom" data-s checked> ローマ字は日本語欄から自動生成(入力不要)</label>
- <div class="wide hint">1行=1フレーズ。スペース無しで続けて打てば、小さい「ゃゅょ」は前の文字にまとめつつ1音ずつ各ノートに割り振られます(例: 「ひかるおそら」「きゃんでぃ」)。1ノートに複数文字を入れたい/英語の歌詞などは、その行だけスペースで区切ってください(例: 「la la 光 る」。スペースが1つでもあればその行は区切り通りになります)。ノートを空にしたい所は「-」。空行にすると自動(ustxの歌詞)に戻ります。下のプレビューで割り振り結果を確認できます(数が合わない行はオレンジ表示)。表示のオン/オフは「ノート・ピッチ線」の設定です。</div>
+ <div class="wide" id="ned"></div>
+ <div class="wide hint" id="nlst" style="color:#e8b26a"></div>
+ <details class="wide"><summary>テキストで一括編集(上級)</summary><div class="grid">
+ <div class="wide hint">1行=1フレーズ、ノートごとにスペース区切り(「-」=空)。スペース無しの行は1音ずつ自動分割(上のチェックがオンの時)。上の入力欄と同期しています。</div>
  <label class="wide">ノート内に表示する歌詞(日本語)
   <textarea id="nlyr" spellcheck="false" placeholder="ustxを読み込むと、ノートごとの歌詞がスペース区切りで入ります"></textarea></label>
  <label class="wide">ノートの上に表示するローマ字
   <textarea id="rlyr" spellcheck="false" placeholder="ustxを読み込むと、自動生成したローマ字が入ります"></textarea></label>
  <div class="wide row"><button id="nAuto">日本語をustxの歌詞に戻す</button><button id="rAuto">ローマ字を自動生成に戻す</button><button id="nKata">日本語をカタカナに</button><button id="nHira">日本語をひらがなに</button></div>
- <div class="wide hint" id="nlst" style="color:#e8b26a"></div>
- <div class="wide"><small>割り振りプレビュー(1マス=1ノート)</small>
-  <div id="nprev" style="max-height:220px;overflow:auto;background:#17181b;border:1px solid #33363c;border-radius:6px;padding:6px 8px;font-size:13px;line-height:1.7"></div></div>
+ </div></details>
 </div></details>
 
 <details><summary>タイトル・演出</summary><div class="grid">
@@ -305,6 +318,7 @@ function fillNoteLyr(a,b){
 const SMALLK='ゃゅょぁぃぅぇぉゎャュョァィゥェォヮ';
 function moras(s){const o=[];for(const c of [...s]){if(SMALLK.includes(c)&&o.length)o[o.length-1]+=c;else o.push(c)}return o}
 const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+let nedBusy=false;
 function applyNoteLyr(){
  const A=$('nlyr').value.split('\n'),B=$('rlyr').value.split('\n'),msg=[];
  const autoSplit=ck('nsplit'),autoRom=ck('nautorom'),prev=[];
@@ -313,7 +327,7 @@ function applyNoteLyr(){
   if(split&&!/[\s　]/.test(s))return moras(s);
   return s.split(/[\s　]+/).filter(Boolean)};
  phrases.forEach((p,i)=>{
-  const ta=sp(A[i],autoSplit),tb=autoRom?[]:sp(B[i],false);
+  const ta=sp(A[i],autoSplit&&p.ns.length>1),tb=autoRom?[]:sp(B[i],false);
   p.ns.forEach((n,j)=>{
    n.ldisp=ta.length?(ta[j]===undefined||ta[j]==='-'?'':ta[j]):n.disp;
    if(autoRom){const r=rom(n.ldisp);n.lrom=/^[\x20-\x7e]*$/.test(r)?r:n.rom}
@@ -321,14 +335,92 @@ function applyNoteLyr(){
   });
   if(ta.length&&ta.length!==p.ns.length)msg.push(`日本語 ${i+1}行目: ${ta.length}個(ノート${p.ns.length}個)`);
   if(tb.length&&tb.length!==p.ns.length)msg.push(`ローマ字 ${i+1}行目: ${tb.length}個(ノート${p.ns.length}個)`);
-  const ok=!ta.length||ta.length===p.ns.length;
-  prev.push(`<div style="padding:2px 0;${ok?'':'color:#e8b26a'}"><b style="color:#8a8d92;display:inline-block;min-width:2.2em">${i+1}</b>`+
-   p.ns.map(n=>`<span style="display:inline-block;min-width:1.4em;text-align:center;margin:1px;padding:0 4px;border:1px solid #3d4046;border-radius:4px">${esc(n.ldisp)||'&nbsp;'}</span>`).join('')+
-   (ta.length>p.ns.length?` <span style="color:#e8b26a">+余り: ${esc(ta.slice(p.ns.length).join(''))}</span>`:'')+`</div>`);
  });
  if(autoRom)$('rlyr').value=phrases.map(p=>p.ns.map(n=>tok(n.lrom)).join(' ')).join('\n');
- $('nprev').innerHTML=prev.join('');
+ if(!nedBusy)buildNed();
  $('nlst').textContent=msg.length?'⚠ 数が合わない行: '+msg.slice(0,4).join(' / ')+(msg.length>4?` ほか${msg.length-4}件`:''):'';
+}
+// ---- ノート歌詞エディタ(ノートごとの入力欄) ----
+let cells=[],hiIdx=-1,lastCompEnd=0,rowCells=[];
+function fmtMS(s){s=Math.max(0,s);return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0')}
+function buildNed(){
+ const box=$('ned');box.textContent='';cells=[];rowCells=[];hiIdx=-1;
+ let flat=0;
+ phrases.forEach((p,pi)=>{
+  const row=document.createElement('div');row.className='nrow';
+  const hd=document.createElement('div');hd.className='nhd';
+  hd.textContent=`${pi+1}  ${fmtMS(p.s)}  ${p.text}`;row.append(hd);
+  const wrap=document.createElement('div');wrap.className='ncells';
+  const rc=[];
+  p.ns.forEach((n,j)=>{
+   const inp=document.createElement('input');inp.type='text';inp.className='ncell';
+   inp.value=n.ldisp;inp.title='元の歌詞: '+(n.disp||'(空)');
+   inp.autocomplete='off';inp.spellcheck=false;
+   inp._i=flat++;inp._p=pi;inp._j=j;
+   wrap.append(inp);cells.push(inp);rc.push(inp);
+  });
+  rowCells.push(rc);row.append(wrap);box.append(row);
+ });
+}
+function commitNed(pi){
+ const p=phrases[pi],rc=rowCells[pi];if(!p||!rc)return;
+ const lines=$('nlyr').value.split('\n');
+ while(lines.length<phrases.length)lines.push('');
+ lines[pi]=rc.map(c=>tok(c.value)).join(' ');
+ $('nlyr').value=lines.join('\n');
+ nedBusy=true;try{applyNoteLyr()}finally{nedBusy=false}
+}
+function nedGo(i){if(cells.length){const c=cells[clamp(i,0,cells.length-1)];c.focus();c.select()}}
+function nedSettle(inp,adv){
+ inp.value=inp.value.replace(/[\s　]/g,'');
+ const pi=inp._p,rc=rowCells[pi];
+ const m=ck('nsplit')?moras(inp.value):[inp.value];
+ if(m.length>1){
+  let over=0;
+  m.forEach((s,k)=>{const c=rc[inp._j+k];if(c)c.value=s;else over+=s.length});
+  commitNed(pi);
+  if(over)setSt(`${pi+1}行目: 余り「${m.slice(rc.length-inp._j).join('')}」はノート数を超えたため入りませんでした`);
+  nedGo(inp._i+m.length);
+ }else{
+  commitNed(pi);
+  if(adv)nedGo(inp._i+1);
+ }
+}
+(function(){
+ const box=$('ned'),isC=e=>e.target.classList&&e.target.classList.contains('ncell');
+ box.addEventListener('input',e=>{if(isC(e)&&!e.isComposing)nedSettle(e.target,false)});
+ box.addEventListener('compositionend',e=>{if(isC(e)){lastCompEnd=Date.now();nedSettle(e.target,true)}});
+ box.addEventListener('focusin',e=>{
+  if(!isC(e))return;e.target.select();
+  const n=notes[e.target._i];
+  if(n&&!playing&&!rec){t=clamp(n.s+(n.e-n.s)*.5,-LEAD,total+TAIL);audioSync(true)}
+ });
+ box.addEventListener('keydown',e=>{
+  if(!isC(e)||e.isComposing||e.keyCode===229)return;
+  const c=e.target,k=e.key;
+  if(k==='Enter'||k===' '||k==='　'){
+   e.preventDefault();
+   if(k==='Enter'&&Date.now()-lastCompEnd<150)return;
+   nedGo(c._i+(e.shiftKey?-1:1));
+  }else if(k==='ArrowRight'&&c.selectionStart===c.value.length&&c.selectionEnd===c.value.length){e.preventDefault();nedGo(c._i+1)}
+  else if(k==='ArrowLeft'&&c.selectionStart===0&&c.selectionEnd===0){e.preventDefault();nedGo(c._i-1)}
+  else if(k==='Backspace'&&c.value===''){e.preventDefault();nedGo(c._i-1)}
+ });
+})();
+function hiTick(){
+ let k=-1;
+ if(notes.length&&cells.length===notes.length){
+  let lo=0,hi=notes.length-1;while(lo<hi){const m=(lo+hi+1)>>1;notes[m].s<=t?lo=m:hi=m-1}
+  if(notes[lo].s<=t&&t<notes[lo].e)k=lo;
+ }
+ if(k!==hiIdx){
+  if(cells[hiIdx])cells[hiIdx].classList.remove('pl');
+  if(cells[k]){
+   cells[k].classList.add('pl');
+   if(playing&&document.activeElement!==cells[k]){const b=$('ned');b.scrollTop=cells[k].offsetTop-b.clientHeight/2}
+  }
+  hiIdx=k;
+ }
 }
 function applyLyr(){
  const lines=$('lyr').value.split('\n');
@@ -799,7 +891,7 @@ function tick(now){
   if(t>=total+TAIL){t=total+TAIL;playing=false;$('pb').textContent='再生';audioSync();if(rec)rec.stop()}
   else audioSync();
  }
- draw(t);
+ draw(t);hiTick();
  $('seek').value=t;$('tl').textContent=`${Math.max(0,t).toFixed(2)} / ${total.toFixed(2)}`;
  if(rec)$('rb').textContent=`録画中… ${Math.round(clamp((t+LEAD)/(total+TAIL+LEAD))*100)}%`;
  requestAnimationFrame(tick);
